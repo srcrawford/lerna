@@ -7,6 +7,7 @@ import Command from "../Command";
 import semver from "semver";
 import async from "async";
 import path from "path";
+import { EOL } from "os";
 
 export default class PublishCommand extends Command {
   initialize(callback) {
@@ -47,7 +48,7 @@ export default class PublishCommand extends Command {
 
       if (!versions) {
         versions = {};
-        this.updates.forEach(update => {
+        this.updates.forEach((update) => {
           versions[update.package.name] = version;
         });
       }
@@ -87,10 +88,19 @@ export default class PublishCommand extends Command {
       return;
     }
 
+    if (this.flags.skipNpm) {
+      callback(null, true);
+    } else {
+      this.publishPackagesToNpm(callback);
+    }
+  }
+
+  publishPackagesToNpm(callback) {
+
     this.logger.newLine();
     this.logger.info("Publishing packages to npm...");
 
-    this.npmPublishAsPrerelease(err => {
+    this.npmPublishAsPrerelease((err) => {
       if (err) {
         callback(err);
         return;
@@ -102,7 +112,7 @@ export default class PublishCommand extends Command {
         GitUtilities.checkoutChanges("packages/*/package.json");
       }
 
-      this.npmUpdateAsLatest(err => {
+      this.npmUpdateAsLatest((err) => {
         if (err) {
           callback(err);
           return;
@@ -116,8 +126,8 @@ export default class PublishCommand extends Command {
 
         let message = "Successfully published:";
 
-        this.updates.forEach(update => {
-          message += `\n - ${update.package.name}@${update.package.version}`;
+        this.updates.forEach((update) => {
+          message += `${EOL} - ${update.package.name}@${update.package.version}`;
         });
 
         this.logger.success(message);
@@ -127,6 +137,12 @@ export default class PublishCommand extends Command {
   }
 
   getVersionsForUpdates(callback) {
+    if (this.flags.repoVersion) {
+      return callback(null, {
+        version: this.flags.repoVersion
+      });
+    }
+
     // Non-Independent Canary Mode
     if (!this.repository.isIndependent() && this.flags.canary) {
       const version = this.globalVersion + this.getCanaryVersionSuffix();
@@ -147,7 +163,7 @@ export default class PublishCommand extends Command {
       const versions = {};
       const canaryVersionSuffix = this.getCanaryVersionSuffix();
 
-      this.updates.forEach(update => {
+      this.updates.forEach((update) => {
         versions[update.package.name] = update.package.version + canaryVersionSuffix;
       });
 
@@ -172,7 +188,7 @@ export default class PublishCommand extends Command {
   }
 
   getCanaryVersionSuffix() {
-    return "-canary." + GitUtilities.getCurrentSHA().slice(0, 8);
+    return "-alpha." + GitUtilities.getCurrentSHA().slice(0, 8);
   }
 
   promptVersion(packageName, currentVersion, callback) {
@@ -191,7 +207,7 @@ export default class PublishCommand extends Command {
         { value: major, name: `Major (${major})` },
         { value: false, name: "Custom" }
       ]
-    }, choice => {
+    }, (choice) => {
       if (choice) {
         callback(null, choice);
         return;
@@ -199,8 +215,8 @@ export default class PublishCommand extends Command {
 
       PromptUtilities.input("Enter a custom version", {
         filter: semver.valid,
-        validate: v => semver.valid(v) ? true : "Must be a valid semver version",
-      }, input => {
+        validate: (v) => semver.valid(v) ? true : "Must be a valid semver version",
+      }, (input) => {
         callback(null, input);
       });
     });
@@ -211,11 +227,11 @@ export default class PublishCommand extends Command {
     this.logger.info("Changes:");
     this.logger.info(this.updates.map((update) => {
       return `- ${update.package.name}: ${update.package.version} => ${this.updatesVersions[update.package.name]}`;
-    }).join("\n"));
+    }).join(EOL));
     this.logger.newLine();
 
     if (!this.flags.yes) {
-      PromptUtilities.confirm("Are you sure you want to publish the above changes?", confirm => {
+      PromptUtilities.confirm("Are you sure you want to publish the above changes?", (confirm) => {
         callback(null, confirm);
       });
     } else {
@@ -235,7 +251,7 @@ export default class PublishCommand extends Command {
   updateUpdatedPackages() {
     const changedFiles = [];
 
-    this.updates.forEach(update => {
+    this.updates.forEach((update) => {
       const pkg = update.package;
       const packageLocation = pkg.location;
       const packageJsonLocation = path.join(packageLocation, "package.json");
@@ -267,7 +283,7 @@ export default class PublishCommand extends Command {
       return;
     }
 
-    this.packageGraph.get(pkg.name).dependencies.forEach(depName => {
+    this.packageGraph.get(pkg.name).dependencies.forEach((depName) => {
       const version = this.updatesVersions[depName];
 
       if (deps[depName] && version) {
@@ -287,11 +303,11 @@ export default class PublishCommand extends Command {
   }
 
   gitCommitAndTagVersionForUpdates() {
-    let message = "Publish\n";
+    let message = "Publish" + EOL;
 
-    const tags = this.updates.map(update => {
+    const tags = this.updates.map((update) => {
       const tag = `${update.package.name}@${this.updatesVersions[update.package.name]}`;
-      message += `\n - ${tag}`;
+      message += `${EOL} - ${tag}`;
       return tag;
     });
 
@@ -318,7 +334,7 @@ export default class PublishCommand extends Command {
   }
 
   npmPublishAsPrerelease(callback) {
-    this.updates.forEach(update => {
+    this.updates.forEach((update) => {
       this.execScript(update.package, "prepublish");
     });
 
@@ -329,10 +345,10 @@ export default class PublishCommand extends Command {
 
       let attempts = 0;
 
-      const run = cb => {
+      const run = (cb) => {
         this.logger.debug("Publishing " + pkg.name + "...");
 
-        NpmUtilities.publishTaggedInDir("lerna-temp", pkg.location, err => {
+        NpmUtilities.publishTaggedInDir("lerna-temp", pkg.location, (err) => {
           err = err && err.stack || err;
 
           if (!err ||
@@ -358,7 +374,7 @@ export default class PublishCommand extends Command {
       };
 
       return run;
-    }), 4, err => {
+    }), this.concurrency, (err) => {
       this.progressBar.terminate();
       callback(err);
     });
@@ -367,7 +383,7 @@ export default class PublishCommand extends Command {
   npmUpdateAsLatest(callback) {
     this.progressBar.init(this.updates.length);
 
-    async.parallelLimit(this.updates.map(update => cb => {
+    async.parallelLimit(this.updates.map((update) => (cb) => {
       const pkg = update.package;
 
       let attempts = 0;
@@ -401,7 +417,7 @@ export default class PublishCommand extends Command {
           }
         }
       }
-    }), 4, err => {
+    }), 4, (err) => {
       this.progressBar.terminate();
       callback(err);
     });

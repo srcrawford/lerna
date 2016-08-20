@@ -4,7 +4,7 @@ import mkdirp from "mkdirp";
 import rimraf from "rimraf";
 import fs from "fs";
 
-var ENDS_WITH_NEW_LINE = /\n$/;
+const ENDS_WITH_NEW_LINE = /\n$/;
 
 function ensureEndsWithNewLine(string) {
   return ENDS_WITH_NEW_LINE.test(string) ? string : string + "\n";
@@ -21,7 +21,7 @@ export default class FileSystemUtilities {
     mkdirp(filePath, callback);
   }
 
-  @logger.logifyAsync
+  @logger.logifySync
   static readdirSync(filePath) {
     return fs.readdirSync(filePath);
   }
@@ -43,12 +43,24 @@ export default class FileSystemUtilities {
 
   @logger.logifySync
   static readFileSync(filePath) {
-    return fs.readFileSync(filePath).toString().trim();
+    return fs.readFileSync(filePath, "utf-8").toString().trim();
   }
 
   @logger.logifyAsync
   static rimraf(filePath, callback) {
     rimraf(filePath, callback);
+  }
+
+  @logger.logifyAsync
+  static symlink(src, dest, callback) {
+    fs.lstat(dest, (err) => {
+      if (!err) {
+        // Something exists at `dest`.  Need to remove it first.
+        fs.unlink(dest, () => fs.symlink(src, dest, callback));
+      } else {
+        fs.symlink(src, dest, callback);
+      }
+    });
   }
 
   @logger.logifySync
